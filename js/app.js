@@ -161,7 +161,10 @@
         { ok: order.lines.every(function (line) { return Boolean(line.catalogSku && productBySku(line.catalogSku)); }), label: "Items found in catalog" },
         { ok: order.lines.every(function (line) { return Number(line.qty) > 0; }), label: "Quantities complete" },
         { ok: priceOk, label: "Prices aligned" },
-        { ok: !order.duplicateOf || order.duplicateCleared || order.status === "posted" || order.status === "discarded", label: "No duplicate" },
+        {
+          ok: !order.duplicateOf || order.duplicateCleared || order.status === "posted" || order.status === "discarded",
+          label: order.status === "discarded" && order.duplicateOf && !order.duplicateCleared ? "Duplicate closed" : "No duplicate",
+        },
       ],
     };
   }
@@ -609,9 +612,9 @@
       + '<div class="side-brand">' + mark() + '<div><div class="word">Klario</div><div class="side-co">' + esc(co.name) + "</div></div></div>"
       + nav.map(function (group) {
         return '<div class="nav-label">' + group[0] + "</div>" + group[1].map(function (item) {
-          const active = state.view === item[0] ? " active" : "";
+          const active = state.view === item[0] || (state.view === "order" && item[0] === "queue");
           const badge = item[0] === "queue" && waiting ? '<span class="badge">' + waiting + "</span>" : "";
-          return '<button class="nav-btn' + active + '" data-act="nav" data-view="' + item[0] + '" aria-current="' + (active ? "page" : "false") + '">'
+          return '<button class="nav-btn' + (active ? " active" : "") + '" data-act="nav" data-view="' + item[0] + '"' + (active ? ' aria-current="page"' : "") + ">"
             + icon(item[2]) + '<span class="grow">' + item[1] + "</span>" + badge + "</button>";
         }).join("");
       }).join("")
@@ -636,6 +639,12 @@
     }).join("") + "</div>";
   }
 
+  function rowLink(item) {
+    const kind = item.order.source.kind;
+    const short = kind === "Excel" ? "XLS" : kind === "Scan" ? "SCAN" : "PDF";
+    return '<button class="row-link" data-act="open" data-id="' + esc(item.order.id) + '"><span class="kind ' + kindClass(kind) + '">' + short + '</span><span class="grow"><strong>' + esc(item.order.customer.extracted) + '</strong><br><small class="ellipsis">' + esc(item.order.id) + " · " + esc(item.order.poNumber) + "</small></span>" + pill(item.phase) + "</button>";
+  }
+
   function renderOverview() {
     const rows = decorated();
     const waiting = rows.filter(function (item) { return item.phase === "review" || item.phase === "duplicate" || item.phase === "extracting"; });
@@ -650,9 +659,14 @@
     const max = Math.max.apply(null, counts.concat([1]));
     const attention = waiting.slice(0, 5);
     const recent = DB.audit.filter(function (item) { return item.companyId === state.companyId; }).slice(0, 5);
-    return ''
+      const waitingCopy = waiting.length
+        ? waiting.length + " document" + (waiting.length === 1 ? "" : "s") + " need a decision before posting."
+        : ready
+          ? ready + (ready === 1 ? " document is ready to post." : " documents are ready to post.")
+          : "Nothing is waiting. New documents will land in the queue.";
+      return ''
       + '<div class="page-head"><div><h1>' + hello + ", " + esc(userName().split(" ")[0]) + ".</h1>"
-      + "<p>" + (waiting.length ? waiting.length + " document" + (waiting.length === 1 ? "" : "s") + " need a decision before posting." : "Nothing is waiting. New documents will land in the queue.") + "</p></div>"
+      + "<p>" + waitingCopy + "</p></div>"
       + '<button class="btn btn-primary" data-act="nav" data-view="queue">Open queue</button></div>'
       + '<section class="stats stagger">'
       + stat(waiting.length, "Need a decision")
@@ -661,9 +675,7 @@
       + stat(rows.length, "In this workspace")
       + "</section>"
       + '<section class="split"><article class="card"><div class="card-h"><h2>Needs attention</h2><button class="linkish" data-act="nav" data-view="queue">View queue</button></div>'
-      + (attention.length ? attention.map(function (item) {
-        return '<button class="row-link" data-act="open" data-id="' + esc(item.order.id) + '"><span class="kind ' + kindClass(item.order.source.kind) + '">' + esc(item.order.source.kind === "Excel" ? "XLS" : item.order.source.kind === "Scan" ? "SCAN" : "PDF") + "</span><span class=\"grow\"><strong>" + esc(item.order.customer.extracted) + "</strong><br><small class=\"ellipsis\">" + esc(item.order.id) + " · " + esc(item.order.poNumber) + "</small></span>" + pill(item.phase) + "</button>";
-      }).join("") : '<p class="empty">The queue is clear.</p>')
+      + (attention.length ? attention.map(rowLink).join("") : (ready ? '<p class="muted" style="margin:8px 0 0">Ready to post</p>' + rows.filter(function (item) { return item.phase === "ready"; }).slice(0, 4).map(rowLink).join("") : '<p class="empty">The queue is clear.</p>'))
       + '</article><div class="stack">'
       + '<article class="card"><div class="card-h"><h2>Document channels</h2></div><div class="bars">'
       + kinds.map(function (kind, index) {
@@ -793,7 +805,7 @@
       + "<span class=\"muted\">" + esc(order.source.file) + " · " + esc(when(order.receivedAt)) + "</span>"
       + (order.status === "extracting" ? "" : confBar(lowest(order)) + '<span class="muted">Lowest match ' + pct(lowest(order)) + "%</span>")
       + "</div></div><div class=\"head-actions\">"
-      + (order.status === "discarded" ? "" : '<button class="btn btn-primary" data-act="approve" ' + (view.phase === "ready" && !busy ? "" : "disabled") + ">" + (busy ? "Creating sales order…" : "Approve and create sales order") + "</button>")
+      + (order.status === "posted" ? '<span class="pill posted"><i></i>Sales order ' + esc(order.bcSalesOrder) + "</span>" : order.status === "discarded" ? "" : '<button class="btn btn-primary" data-act="approve" ' + (view.phase === "ready" && !busy ? "" : "disabled") + ">" + (busy ? "Creating sales order…" : "Approve and create sales order") + "</button>")
       + "</div></div>"
       + '<div class="order-grid"><div class="paper-wrap">' + (order.status === "extracting" ? '<article class="paper"><header><span>READING</span><span>' + esc(order.source.file) + '</span></header><div class="shimmer" style="margin-top:18px"><span></span><span></span><span></span><span></span></div></article>' : paperHtml(order, view.report.blocks)) + "</div>"
       + '<div class="side"><section class="card block"><h2>Extracted order</h2>'
@@ -1103,7 +1115,7 @@
     const root = document.getElementById("app");
     root.innerHTML = state.authed ? renderShell(renderPage()) : renderLogin();
     document.title = (state.authed ? (state.view === "order" && state.orderId ? state.orderId + " · " : "") : "") + "Klario · Order intake";
-    if (focusId) {
+    if (focusId && !anim) {
       const el = document.getElementById(focusId);
       if (el) {
         el.focus();

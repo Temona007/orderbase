@@ -546,12 +546,22 @@ img { max-width: 100%; }
 
 @media (max-width: 980px) {
   .login, .shell, .split, .order-grid, .wiz, .co-grid, .plan-grid, .fact-grid { grid-template-columns: 1fr; }
-  .sidebar { position: relative; height: auto; }
+  .sidebar {
+    position: sticky; top: 0; height: auto; z-index: 25;
+    flex-direction: row; align-items: center; gap: 4px;
+    overflow-x: auto; padding: 10px;
+  }
+  .side-brand { padding: 0 8px 0 0; }
+  .nav-label, .side-co, .side-foot div { display: none; }
+  .side-foot { margin-top: 0; padding: 0; }
+  .nav-btn, .lock { width: auto; white-space: nowrap; }
   .stats { grid-template-columns: 1fr 1fr; }
   .order-row { grid-template-columns: 70px 1fr; }
   .paper-wrap { position: static; }
   .brand-panel { min-height: 420px; }
   .form-grid { grid-template-columns: 1fr; }
+  .topbar { padding: 12px 16px; }
+  .content { padding: 8px 16px 64px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
